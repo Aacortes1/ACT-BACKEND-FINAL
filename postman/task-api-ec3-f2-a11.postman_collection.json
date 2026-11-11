@@ -1,0 +1,752 @@
+{
+  "info": {
+    "_postman_id": "ea879881-bae7-4849-af6f-ec3f2a110001",
+    "name": "Task API EC3 F2 A11 - Pruebas, OpenAPI e integración",
+    "description": "Casos A11 para autenticación, autorización, documentación OpenAPI y regresión. Importa el entorno A10 local. Los tokens se guardan solo en variables secretas del entorno local.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Públicas y seguridad HTTP",
+      "item": [
+        {
+          "name": "GET /health - público, Helmet y requestId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('health responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Helmet envía nosniff y no se expone Express', () => { pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); pm.expect(pm.response.headers.get('X-Powered-By')).to.be.null; });",
+                  "pm.test('incluye X-Request-Id', () => pm.expect(pm.response.headers.get('X-Request-Id')).to.be.a('string').and.not.empty);",
+                  "pm.test(\"devuelve data.status up\", () => pm.expect(pm.response.json().data.status).to.eql(\"up\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health"
+          }
+        },
+        {
+          "name": "CORS - origen permitido",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('health responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('permite el origen configurado', () => pm.expect(pm.response.headers.get('Access-Control-Allow-Origin')).to.eql(pm.variables.get('allowedOrigin')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Origin",
+                "value": "{{allowedOrigin}}"
+              }
+            ],
+            "url": "{{baseUrl}}/health"
+          }
+        },
+        {
+          "name": "CORS - origen rechazado no recibe permiso",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('la API puede responder 200 a Postman', () => pm.response.to.have.status(200));",
+                  "pm.test('no concede Access-Control-Allow-Origin', () => pm.expect(pm.response.headers.get('Access-Control-Allow-Origin')).to.be.null);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Origin",
+                "value": "{{deniedOrigin}}"
+              }
+            ],
+            "url": "{{baseUrl}}/health"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Autenticación y errores 401",
+      "item": [
+        {
+          "name": "Registro de usuario de práctica",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.variables.replaceIn('{{$guid}}');",
+                  "pm.environment.set('testEmail', `a10-${id}@example.com`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('registro crea la cuenta o informa que ya existe', () => pm.expect([201, 409]).to.include(pm.response.code));",
+                  "if (pm.response.code === 201) { const user = pm.response.json().data.user; pm.test('registro asigna rol user y no expone hash', () => { pm.expect(user.role).to.eql('user'); pm.expect(user).not.to.have.property('passwordHash'); }); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Usuario A10 de práctica\",\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{password}}\",\n  \"confirmPassword\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/auth/register"
+          }
+        },
+        {
+          "name": "Login user - guarda userToken",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login responde 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json().data;",
+                  "pm.environment.set('userToken', data.accessToken);",
+                  "pm.test('entrega JWT Bearer con rol user', () => { pm.expect(data.tokenType).to.eql('Bearer'); pm.expect(data.user.role).to.eql('user'); pm.expect(data.accessToken).to.be.a('string').and.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "GET /api/auth/me - usuario actual",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"responde 200\", () => pm.response.to.have.status(200));",
+                  "const user = pm.response.json().data.user;",
+                  "pm.test(\"devuelve el usuario sin hash\", () => { pm.expect(user.id).to.be.a(\"string\").and.not.empty; pm.expect(user.role).to.eql(\"user\"); pm.expect(user).not.to.have.property(\"passwordHash\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/auth/me"
+          }
+        },
+        {
+          "name": "401 - tareas sin Authorization",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 401 AUTHENTICATION_REQUIRED', () => { pm.response.to.have.status(401); pm.expect(pm.response.json().error.code).to.eql('AUTHENTICATION_REQUIRED'); });",
+                  "pm.test('el requestId del cuerpo coincide con el encabezado', () => pm.expect(pm.response.json().error.requestId).to.eql(pm.response.headers.get('X-Request-Id')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/tasks"
+          }
+        },
+        {
+          "name": "401 - Authorization sin esquema Bearer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 401 INVALID_AUTHORIZATION_HEADER', () => { pm.response.to.have.status(401); pm.expect(pm.response.json().error.code).to.eql('INVALID_AUTHORIZATION_HEADER'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/tasks"
+          }
+        },
+        {
+          "name": "401 - JWT no verificable",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 401 INVALID_TOKEN', () => { pm.response.to.have.status(401); pm.expect(pm.response.json().error.code).to.eql('INVALID_TOKEN'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer token.invalido.firmado"
+              }
+            ],
+            "url": "{{baseUrl}}/api/tasks"
+          }
+        },
+        {
+          "name": "401 - /api/auth/me sin token (desafío)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 401 AUTHENTICATION_REQUIRED', () => { pm.response.to.have.status(401); pm.expect(pm.response.json().error.code).to.eql('AUTHENTICATION_REQUIRED'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/auth/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CRUD autenticado y regresión",
+      "item": [
+        {
+          "name": "Crear tarea A10",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('crea tarea con 201', () => pm.response.to.have.status(201));",
+                  "pm.environment.set('taskId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"A10 tarea de prueba\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/tasks"
+          }
+        },
+        {
+          "name": "Listar con paginación, filtro, búsqueda y orden",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('consulta responde 200 con data y meta', () => { pm.response.to.have.status(200); const body = pm.response.json(); pm.expect(body.data).to.be.an('array'); pm.expect(body.meta).to.have.property('page'); });",
+                  "pm.test('incluye la tarea A10 creada', () => pm.expect(pm.response.json().data.some((task) => task.id === pm.environment.get('taskId'))).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/tasks?page=1&limit=5&status=pending&search=A10&sortBy=title&order=asc"
+          }
+        },
+        {
+          "name": "Consultar por id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('consulta tarea con 200', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().data.id).to.eql(pm.environment.get('taskId')); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/tasks/{{taskId}}"
+          }
+        },
+        {
+          "name": "Actualizar título",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('actualiza con 200', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().data.title).to.eql('A10 tarea actualizada'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"A10 tarea actualizada\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/tasks/{{taskId}}"
+          }
+        },
+        {
+          "name": "Completar tarea",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('completa con 200', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().data.status).to.eql('completed'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/tasks/{{taskId}}/complete"
+          }
+        },
+        {
+          "name": "422 - consulta inválida",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 422 QUERY_VALIDATION_ERROR', () => { pm.response.to.have.status(422); pm.expect(pm.response.json().error.code).to.eql('QUERY_VALIDATION_ERROR'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/tasks?page=0"
+          }
+        },
+        {
+          "name": "400 - id inválido",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 400 INVALID_TASK_ID', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('INVALID_TASK_ID'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Cambio\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/tasks/id-invalido"
+          }
+        },
+        {
+          "name": "415 - Content-Type incorrecto",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 415 UNSUPPORTED_MEDIA_TYPE', () => { pm.response.to.have.status(415); pm.expect(pm.response.json().error.code).to.eql('UNSUPPORTED_MEDIA_TYPE'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "text/plain"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "Tarea inválida",
+              "options": {
+                "raw": {
+                  "language": "text"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/tasks"
+          }
+        },
+        {
+          "name": "400 - JSON inválido",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 400 INVALID_JSON', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('INVALID_JSON'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/tasks"
+          }
+        },
+        {
+          "name": "403 - user no puede eliminar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 403 FORBIDDEN', () => { pm.response.to.have.status(403); pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/tasks/{{taskId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - ejecutar después de promover la cuenta",
+      "description": "En una terminal ejecuta pnpm role:set <correo> admin y luego envía Login admin para guardar el JWT nuevo en adminToken. El token user anterior conserva su rol anterior hasta expirar.",
+      "item": [
+        {
+          "name": "Login admin - guarda adminToken",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login responde 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json().data;",
+                  "pm.test('el token nuevo tiene rol admin', () => pm.expect(data.user.role).to.eql('admin'));",
+                  "pm.environment.set('adminToken', data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "204 - admin elimina tarea",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 204 sin cuerpo', () => { pm.response.to.have.status(204); pm.expect(pm.response.text()).to.eql(''); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/tasks/{{taskId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rate limit - ejecutar al final",
+      "description": "Envía solicitudes de login suficientes dentro de AUTH_RATE_LIMIT_WINDOW_MS para superar AUTH_RATE_LIMIT_MAX. La siguiente solicitud debe responder 429. No repitas innecesariamente durante la práctica.",
+      "item": [
+        {
+          "name": "429 - límite de autenticación superado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 429 AUTH_RATE_LIMIT_EXCEEDED', () => { pm.response.to.have.status(429); pm.expect(pm.response.json().error.code).to.eql('AUTH_RATE_LIMIT_EXCEEDED'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"nadie@example.com\",\n  \"password\": \"Contraseña equivocada 2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "OpenAPI y Swagger UI",
+      "item": [
+        {
+          "name": "GET /api-docs.json - OpenAPI 3.1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"responde 200 con OpenAPI 3.1.0\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().openapi).to.eql(\"3.1.0\"); });",
+                  "pm.test(\"define bearerAuth y /me\", () => { const doc = pm.response.json(); pm.expect(doc.components.securitySchemes.bearerAuth.scheme).to.eql(\"bearer\"); pm.expect(doc.paths[\"/api/auth/me\"]).to.have.property(\"get\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api-docs.json"
+          }
+        },
+        {
+          "name": "GET /api-docs - Swagger UI",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Swagger UI responde HTML\", () => { pm.response.to.have.status(200); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"text/html\"); pm.expect(pm.response.text()).to.include(\"swagger-ui\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api-docs/"
+          }
+        }
+      ]
+    }
+  ]
+}

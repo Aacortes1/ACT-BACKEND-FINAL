@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import {
-  getCurrentIdentity,
+  getMe,
   postLogin,
   postRegister,
 } from "../controllers/auth.controller.js";
@@ -23,4 +23,4 @@ authRouter.post(
   postRegister,
 );
 authRouter.post("/login", authRateLimiter, requireJson, validateLogin, postLogin);
-authRouter.get("/me", authenticate, getCurrentIdentity);
+authRouter.get("/me", authenticate, getMe);
