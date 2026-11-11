@@ -32,6 +32,38 @@ const readJwtExpiration = (): string => {
   return value;
 };
 
+const readPositiveInteger = (name: string, fallback: string): number => {
+  const rawValue = process.env[name] ?? fallback;
+  if (!/^\d+$/.test(rawValue)) {
+    throw new Error(`${name} debe ser un número entero mayor que cero.`);
+  }
+  const value = Number(rawValue);
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`${name} debe ser un número entero mayor que cero.`);
+  }
+  return value;
+};
+
+const readCorsOrigin = (): string => {
+  const value = requireEnvironmentVariable("CORS_ORIGIN");
+  let origin: URL;
+  try {
+    origin = new URL(value);
+  } catch {
+    throw new Error("CORS_ORIGIN debe ser un origen HTTP o HTTPS válido.");
+  }
+
+  if (
+    (origin.protocol !== "http:" && origin.protocol !== "https:") ||
+    origin.origin !== value
+  ) {
+    throw new Error(
+      "CORS_ORIGIN debe contener solo esquema, host y puerto, sin ruta.",
+    );
+  }
+  return value;
+};
+
 export const env = Object.freeze({
   PORT: readPort(),
   MONGODB_URI: requireEnvironmentVariable("MONGODB_URI"),
@@ -40,4 +72,10 @@ export const env = Object.freeze({
   JWT_EXPIRES_IN: readJwtExpiration(),
   JWT_ISSUER: process.env.JWT_ISSUER?.trim() || "task-api-express",
   JWT_AUDIENCE: process.env.JWT_AUDIENCE?.trim() || "task-api-client",
+  CORS_ORIGIN: readCorsOrigin(),
+  AUTH_RATE_LIMIT_WINDOW_MS: readPositiveInteger(
+    "AUTH_RATE_LIMIT_WINDOW_MS",
+    "900000",
+  ),
+  AUTH_RATE_LIMIT_MAX: readPositiveInteger("AUTH_RATE_LIMIT_MAX", "10"),
 });

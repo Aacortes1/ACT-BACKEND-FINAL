@@ -14,7 +14,7 @@ export const validateTaskId = (
       new AppError(
         "El id debe ser un ObjectId válido.",
         400,
-        "INVALID_ID",
+        "INVALID_TASK_ID",
       ),
     );
     return;
