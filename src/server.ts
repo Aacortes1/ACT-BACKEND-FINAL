@@ -42,11 +42,18 @@ const startServer = async (): Promise<void> => {
     server = app.listen(env.PORT, () => {
       console.log(`API disponible en http://localhost:${env.PORT}`);
     });
-  } catch {
+  } catch (error: unknown) {
     console.error(
       "No fue posible iniciar la API. Revise MONGODB_URI, " +
         "el usuario y la lista de acceso de red.",
     );
+    const errorMessage =
+      error instanceof Error ? error.message : String(error);
+    const safeErrorMessage = errorMessage.replace(
+      /(mongodb(?:\+srv)?:\/\/)[^@\s]+@/gi,
+      "$1[credenciales ocultas]@",
+    );
+    console.error("Detalle de la conexión:", safeErrorMessage);
     process.exitCode = 1;
   }
 };
