@@ -6,7 +6,7 @@
 - Grupo: por completar.
 - Repositorio: [ACT-5-BACKEND](https://github.com/GildardoPRMX/ACT-5-BACKEND-).
 - Branch de entrega: `ec3-a12-despliegue-liberacion`.
-- Commit desplegado: pendiente de despliegue.
+- Commit candidato: `012cfcf` (pendiente de despliegue en Render).
 - Etiqueta: pendiente de aceptación; no creada.
 - URL prevista del frontend: `https://aarat-task-client-ec3-f3-a12.onrender.com` (sin confirmar).
 - URL prevista de la API: `https://aarat-task-api-ec3-f3-a12.onrender.com` (sin confirmar).
