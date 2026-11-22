@@ -1,36 +1,47 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-
-import { ApiHttpError, apiRequest } from "./api.js";
-import type {
-  ApiEnvelope,
-  LoginData,
-  Task,
-  TaskListResponse,
-  User,
-} from "./types.js";
+import { useCallback, useEffect, useState } from "react";
+import { ApiHttpError } from "./api.js";
+import { AuthPanel } from "./components/AuthPanel.js";
+import { TaskFilters } from "./components/TaskFilters.js";
+import { TaskForm } from "./components/TaskForm.js";
+import { TaskList } from "./components/TaskList.js";
+import {
+  createTask,
+  deleteTask,
+  getMe,
+  listTasks,
+  login,
+  register,
+  updateTask,
+} from "./task-api.js";
+import type { PaginationMeta, Task, TaskListQuery, User } from "./types.js";
 
 const TOKEN_KEY = "task-api.access-token";
+const INITIAL_QUERY: TaskListQuery = {
+  page: 1,
+  limit: 5,
+  status: "",
+  search: "",
+  sortBy: "createdAt",
+  order: "desc",
+};
 
 const messageFrom = (error: unknown): string => {
   if (error instanceof ApiHttpError) {
     const reference = error.requestId ? ` Referencia: ${error.requestId}.` : "";
-    return `${error.code}: ${error.message}${reference}`;
+    return `${error.message}${reference}`;
   }
   return "No fue posible comunicarse con la API.";
 };
 
 export default function App() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [newTaskTitle, setNewTaskTitle] = useState("");
   const [token, setToken] = useState<string | null>(() =>
     sessionStorage.getItem(TOKEN_KEY),
   );
   const [user, setUser] = useState<User | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [message, setMessage] = useState(
-    "Inicia sesión para consultar tus tareas.",
-  );
+  const [meta, setMeta] = useState<PaginationMeta | null>(null);
+  const [query, setQuery] = useState<TaskListQuery>(INITIAL_QUERY);
+  const [message, setMessage] = useState("Inicia sesión o crea una cuenta.");
   const [busy, setBusy] = useState(false);
 
   const clearSession = useCallback((): void => {
@@ -38,27 +49,14 @@ export default function App() {
     setToken(null);
     setUser(null);
     setTasks([]);
+    setMeta(null);
   }, []);
 
-  const loadProtectedData = useCallback(
-    async (accessToken: string): Promise<void> => {
+  const run = useCallback(
+    async (operation: () => Promise<void>): Promise<void> => {
+      setBusy(true);
       try {
-        setBusy(true);
-        const [meResponse, taskResponse] = await Promise.all([
-          apiRequest<ApiEnvelope<{ user: User }>>(
-            "/api/auth/me",
-            {},
-            accessToken,
-          ),
-          apiRequest<TaskListResponse>(
-            "/api/tasks?limit=10&sortBy=createdAt&order=desc",
-            {},
-            accessToken,
-          ),
-        ]);
-        setUser(meResponse.data.user);
-        setTasks(taskResponse.data);
-        setMessage(`Se recuperaron ${taskResponse.meta.total} tareas.`);
+        await operation();
       } catch (error: unknown) {
         if (error instanceof ApiHttpError && error.status === 401) {
           clearSession();
@@ -71,67 +69,111 @@ export default function App() {
     [clearSession],
   );
 
-  useEffect(() => {
-    if (token) void loadProtectedData(token);
-  }, [loadProtectedData, token]);
+  const loadTasks = useCallback(
+    async (accessToken: string, selectedQuery: TaskListQuery): Promise<void> => {
+      const response = await listTasks(selectedQuery, accessToken);
+      setTasks(response.data);
+      setMeta(response.meta);
+      setMessage(`Se muestran ${response.data.length} de ${response.meta.total} tareas.`);
+    },
+    [],
+  );
 
-  const handleLogin = async (
-    event: FormEvent<HTMLFormElement>,
-  ): Promise<void> => {
-    event.preventDefault();
-    setBusy(true);
-    setMessage("Comprobando credenciales...");
-    try {
-      const response = await apiRequest<ApiEnvelope<LoginData>>(
-        "/api/auth/login",
-        {
-          method: "POST",
-          body: JSON.stringify({ email, password }),
-        },
-      );
-      sessionStorage.setItem(TOKEN_KEY, response.data.accessToken);
-      setToken(response.data.accessToken);
-      setPassword("");
-    } catch (error: unknown) {
-      setMessage(messageFrom(error));
-      setBusy(false);
-    }
+  const loadSession = useCallback(
+    async (accessToken: string): Promise<void> => {
+      await run(async () => {
+        const response = await getMe(accessToken);
+        setUser(response.data.user);
+        await loadTasks(accessToken, INITIAL_QUERY);
+        setQuery(INITIAL_QUERY);
+      });
+    },
+    [loadTasks, run],
+  );
+
+  useEffect(() => {
+    if (token) void loadSession(token);
+  }, [loadSession, token]);
+
+  const saveToken = (accessToken: string): void => {
+    sessionStorage.setItem(TOKEN_KEY, accessToken);
+    setToken(accessToken);
   };
 
-  const handleCreateTask = async (
-    event: FormEvent<HTMLFormElement>,
-  ): Promise<void> => {
-    event.preventDefault();
-    const title = newTaskTitle.trim();
-    if (!title) {
-      setMessage("Escribe un título para la tarea.");
-      return;
-    }
-    if (!token) {
-      setMessage("Inicia sesión antes de crear tareas.");
-      return;
-    }
+  const handleLogin = async (email: string, password: string): Promise<void> => {
+    await run(async () => {
+      const response = await login(email, password);
+      saveToken(response.data.accessToken);
+      setMessage("Sesión iniciada correctamente.");
+    });
+  };
 
-    setBusy(true);
-    setMessage("Creando tarea...");
-    try {
-      const response = await apiRequest<ApiEnvelope<Task>>(
-        "/api/tasks",
-        { method: "POST", body: JSON.stringify({ title }) },
-        token,
-      );
-      setTasks((current) => [response.data, ...current]);
-      setNewTaskTitle("");
+  const handleRegister = async (
+    name: string,
+    email: string,
+    password: string,
+  ): Promise<void> => {
+    await run(async () => {
+      await register(name, email, password);
+      const response = await login(email, password);
+      saveToken(response.data.accessToken);
+      setMessage("Cuenta creada. La sesión quedó iniciada.");
+    });
+  };
+
+  const refresh = async (selectedQuery = query): Promise<void> => {
+    if (!token) return;
+    await run(() => loadTasks(token, selectedQuery));
+  };
+
+  const handleCreate = async (title: string): Promise<void> => {
+    if (!token) return;
+    await run(async () => {
+      await createTask({ title }, token);
+      const firstPage = { ...query, page: 1 };
+      setQuery(firstPage);
+      await loadTasks(token, firstPage);
       setMessage("La tarea se creó correctamente.");
-    } catch (error: unknown) {
-      setMessage(messageFrom(error));
-    } finally {
-      setBusy(false);
-    }
+    });
+  };
+
+  const handleRename = async (task: Task, title: string): Promise<void> => {
+    if (!token) return;
+    await run(async () => {
+      await updateTask(task.id, { title }, token);
+      await loadTasks(token, query);
+      setMessage("El título se actualizó correctamente.");
+    });
+  };
+
+  const handleToggle = async (task: Task): Promise<void> => {
+    if (!token) return;
+    await run(async () => {
+      const status = task.status === "pending" ? "completed" : "pending";
+      await updateTask(task.id, { status }, token);
+      await loadTasks(token, query);
+      setMessage("El estado se actualizó correctamente.");
+    });
+  };
+
+  const handleDelete = async (task: Task): Promise<void> => {
+    if (!token || !window.confirm(`¿Eliminar la tarea “${task.title}”?`)) return;
+    await run(async () => {
+      await deleteTask(task.id, token);
+      await loadTasks(token, query);
+      setMessage("La tarea se eliminó correctamente.");
+    });
+  };
+
+  const changePage = async (page: number): Promise<void> => {
+    const next = { ...query, page };
+    setQuery(next);
+    await refresh(next);
   };
 
   const handleLogout = (): void => {
     clearSession();
+    setQuery(INITIAL_QUERY);
     setMessage("La sesión local se eliminó.");
   };
 
@@ -139,112 +181,74 @@ export default function App() {
     <main className="page-shell">
       <header className="page-header">
         <div>
-          <p className="eyebrow">EC3 F2 A11</p>
+          <p className="eyebrow">EC3 F3 A12</p>
           <h1>Task API Client</h1>
-          <p>Integración inicial con una API protegida por JWT.</p>
+          <p>Cliente integrado para gestionar tareas.</p>
         </div>
         {user && <button onClick={handleLogout}>Cerrar sesión</button>}
       </header>
 
       {!token ? (
-        <section className="panel login-panel" aria-labelledby="login-title">
-          <h2 id="login-title">Iniciar sesión</h2>
-          <form onSubmit={(event) => void handleLogin(event)}>
-            <label htmlFor="email">Correo electrónico</label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              autoComplete="username"
-              required
-            />
-            <label htmlFor="password">Contraseña</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="current-password"
-              required
-            />
-            <button type="submit" disabled={busy}>
-              {busy ? "Ingresando..." : "Ingresar"}
-            </button>
-          </form>
-        </section>
+        <AuthPanel busy={busy} onLogin={handleLogin} onRegister={handleRegister} />
       ) : (
-        <section className="workspace" aria-busy={busy}>
+        <section aria-busy={busy}>
           <article className="panel identity-panel">
-            <h2>Identidad autenticada</h2>
-            {user ? (
-              <dl>
-                <div>
-                  <dt>Nombre</dt>
-                  <dd>{user.name}</dd>
-                </div>
-                <div>
-                  <dt>Correo</dt>
-                  <dd>{user.email}</dd>
-                </div>
-                <div>
-                  <dt>Rol</dt>
-                  <dd>{user.role}</dd>
-                </div>
-              </dl>
-            ) : (
-              <p>Validando el token...</p>
-            )}
+            <div>
+              <h2>{user ? `Hola, ${user.name}` : "Validando tu sesión…"}</h2>
+              {user && <p>{user.email} · rol <strong>{user.role}</strong></p>}
+            </div>
+            <button
+              className="secondary"
+              onClick={() => void refresh()}
+              disabled={busy}
+            >
+              Actualizar
+            </button>
           </article>
 
-          <article className="panel task-panel">
-            <div className="section-heading">
-              <h2>Tareas</h2>
-              <button
-                onClick={() => token && void loadProtectedData(token)}
-                disabled={busy}
-              >
-                Actualizar
-              </button>
-            </div>
-
-            <form
-              className="task-form"
-              onSubmit={(event) => void handleCreateTask(event)}
-            >
-              <label htmlFor="new-task-title">Crear tarea</label>
-              <div className="task-input-row">
-                <input
-                  id="new-task-title"
-                  type="text"
-                  maxLength={120}
-                  value={newTaskTitle}
-                  onChange={(event) => setNewTaskTitle(event.target.value)}
-                  placeholder="¿Qué necesitas hacer?"
-                />
-                <button type="submit" disabled={busy}>
-                  Crear
+          <article className="panel">
+            <h2>Gestionar tareas</h2>
+            <TaskForm busy={busy} onCreate={handleCreate} />
+            <hr />
+            <TaskFilters
+              value={query}
+              busy={busy}
+              onChange={setQuery}
+              onApply={() => refresh()}
+            />
+            <TaskList
+              tasks={tasks}
+              canDelete={user?.role === "admin"}
+              busy={busy}
+              onRename={handleRename}
+              onToggle={handleToggle}
+              onDelete={handleDelete}
+            />
+            {meta && (
+              <nav className="pagination" aria-label="Paginación de tareas">
+                <button
+                  className="secondary"
+                  disabled={busy || !meta.hasPreviousPage}
+                  onClick={() => void changePage(meta.page - 1)}
+                >
+                  Anterior
                 </button>
-              </div>
-            </form>
-
-            {tasks.length === 0 ? (
-              <p>No hay tareas para mostrar.</p>
-            ) : (
-              <ul className="task-list">
-                {tasks.map((task) => (
-                  <li key={task.id}>
-                    <span>{task.title}</span>
-                    <strong>{task.status}</strong>
-                  </li>
-                ))}
-              </ul>
+                <span>
+                  Página {meta.page} de {Math.max(meta.totalPages, 1)}
+                </span>
+                <button
+                  className="secondary"
+                  disabled={busy || !meta.hasNextPage}
+                  onClick={() => void changePage(meta.page + 1)}
+                >
+                  Siguiente
+                </button>
+              </nav>
             )}
           </article>
         </section>
       )}
-
-      <p className="status-message" role="status">
+      <p className="status-message" role="status" aria-live="polite">
         {message}
       </p>
     </main>

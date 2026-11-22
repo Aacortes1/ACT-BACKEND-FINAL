@@ -1,3 +1,5 @@
+import { env } from "../config/env.js";
+
 const errorResponse = (description: string): Record<string, unknown> => ({
   description,
   content: {
@@ -60,11 +62,17 @@ export const openApiDocument: Record<string, unknown> = {
   openapi: "3.1.0",
   info: {
     title: "Task API Express",
-    version: "1.0.0",
+    version: env.APP_VERSION,
     description:
       "API REST de tareas con autenticación JWT, autorización por roles y respuestas de error con requestId.",
   },
-  servers: [{ url: "http://localhost:3000", description: "Entorno local" }],
+  servers: [
+    {
+      url: env.PUBLIC_API_URL,
+      description:
+        env.NODE_ENV === "production" ? "Entorno de producción" : "Entorno local",
+    },
+  ],
   tags: [
     { name: "Health", description: "Estado del servicio y la base de datos" },
     { name: "Auth", description: "Registro, acceso e identidad autenticada" },
@@ -86,8 +94,16 @@ export const openApiDocument: Record<string, unknown> = {
                   properties: {
                     data: {
                       type: "object",
-                      required: ["status"],
-                      properties: { status: { type: "string", const: "up" } },
+                      required: ["status", "version", "environment"],
+                      properties: {
+                        status: { type: "string", const: "up" },
+                        version: { type: "string", example: env.APP_VERSION },
+                        environment: {
+                          type: "string",
+                          enum: ["development", "test", "production"],
+                          example: env.NODE_ENV,
+                        },
+                      },
                     },
                   },
                 },
@@ -113,15 +129,27 @@ export const openApiDocument: Record<string, unknown> = {
                   properties: {
                     data: {
                       type: "object",
-                      required: ["database"],
+                      required: ["status"],
+                      properties: { status: { type: "string", const: "up" } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "503": {
+            description: "Base de datos no disponible",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["data"],
+                  properties: {
+                    data: {
+                      type: "object",
+                      required: ["status"],
                       properties: {
-                        database: {
-                          type: "object",
-                          required: ["status"],
-                          properties: {
-                            status: { type: "string", const: "connected" },
-                          },
-                        },
+                        status: { type: "string", const: "down" },
                       },
                     },
                   },
@@ -129,7 +157,6 @@ export const openApiDocument: Record<string, unknown> = {
               },
             },
           },
-          "503": databaseUnavailable,
           default: internalError,
         },
       },

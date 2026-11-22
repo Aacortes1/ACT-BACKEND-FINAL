@@ -39,8 +39,10 @@ const startServer = async (): Promise<void> => {
       uri: env.MONGODB_URI,
       dbName: env.MONGODB_DB_NAME,
     });
-    server = app.listen(env.PORT, () => {
-      console.log(`API disponible en http://localhost:${env.PORT}`);
+    server = app.listen(env.PORT, "0.0.0.0", () => {
+      console.log(
+        `API ${env.APP_VERSION} disponible en ${env.PUBLIC_API_URL}`,
+      );
     });
   } catch (error: unknown) {
     console.error(

@@ -27,7 +27,7 @@ Cliente (Postman / Frontend)
          |      +--> jose: firma y verifica JWT
          |
          +--> /health
-         |      +--> GET / -> data.status up
+         |      +--> GET / -> data.status, version y environment
          |      +--> GET /database -> ping a MongoDB Atlas
          |
          +--> /api/tasks
@@ -48,7 +48,11 @@ Copie `.env.example` a `.env` y complete valores reales sin versionarlos:
 
 | Variable | Uso |
 |---|---|
+| `NODE_ENV` | Ambiente `development`, `test` o `production`. |
+| `APP_VERSION` | Versión que reporta la salud y OpenAPI; por defecto `1.0.0`. |
 | `PORT` | Puerto local de Express. |
+| `PUBLIC_API_URL` | URL base pública o local de la API; alimenta OpenAPI y el log de arranque. |
+| `TRUST_PROXY_HOPS` | Saltos de proxy confiables; `0` en local y `1` en el Blueprint de Render. |
 | `MONGODB_URI` | Cadena de conexión privada a MongoDB Atlas. |
 | `MONGODB_DB_NAME` | Base de datos usada por la API, por defecto `task_api`. |
 | `JWT_SECRET` | Clave aleatoria de al menos 32 bytes para firmar y verificar JWT. |
@@ -127,8 +131,10 @@ OpenAPI 3.1 se sirve en `/api-docs.json` y Swagger UI en `/api-docs/`. La docume
 | `pnpm test:watch` | Ejecuta Vitest en modo observación. |
 | `pnpm client:dev` | Inicia Vite en `http://localhost:5173`. |
 | `pnpm client:check` | Verifica los tipos del cliente React. |
+| `pnpm client:test` | Ejecuta las tres pruebas del adaptador HTTP del cliente. |
 | `pnpm client:build` | Construye el cliente en `client/dist`. |
-| `pnpm verify` | Ejecuta tipos, pruebas y builds de backend y cliente. |
+| `pnpm smoke:release` | Ejecuta comprobaciones de solo lectura a una API desplegada. |
+| `pnpm verify` | Ejecuta tipos, seis pruebas backend, tres pruebas cliente y ambos builds. |
 
 ## Verificación y evidencias
 
@@ -139,3 +145,11 @@ Ejecuta `pnpm verify` antes de entregar. Las pruebas automatizadas sustituyen lo
 - Pruebas CRUD persistente: `docs/pruebas-crud-mongodb.md`
 - Reflexión CRUD persistente: `docs/reflexion-crud-mongodb.md`
 - Colección Postman sugerida: `postman/task-api-ec2-f2-a7.postman_collection.json`
+
+## Despliegue y liberación A12
+
+`render.yaml` declara un servicio Node para la API y un sitio estático para React. Los nombres actuales son `aarat-task-api-ec3-f3-a12` y `aarat-task-client-ec3-f3-a12`; verifica que estén disponibles en tu workspace Render. El Blueprint solicita `PUBLIC_API_URL`, `CORS_ORIGIN`, `MONGODB_URI` y `VITE_API_URL` durante la creación y genera `JWT_SECRET`. Nunca subas `.env` ni copies secretos al Blueprint.
+
+La configuración de producción usa `TRUST_PROXY_HOPS=1`, el backend escucha `PORT` en `0.0.0.0` y el sitio estático reescribe las rutas SPA a `index.html`. En Atlas, limita Network Access a las direcciones de salida que Render muestre para el servicio; no mantengas `0.0.0.0/0`.
+
+Antes de liberar, ejecuta `pnpm install --frozen-lockfile` y `pnpm verify`, completa `docs/release-checklist.md`, captura resultados sin secretos y ejecuta `pnpm smoke:release` con `API_URL`, `USER_EMAIL` y `USER_PASSWORD` definidos localmente. Crea y sube la etiqueta `v1.0.0` únicamente cuando Render, Atlas y la prueba de humo hayan aprobado el mismo commit desplegado. La evidencia de esta branch separa los resultados locales de los pasos de producción aún no comprobados.

@@ -1,5 +1,5 @@
 {
-  "name": "backend-frameworks",
+  "name": "task-api-express",
   "version": "1.0.0",
   "description": "",
   "private": true,
@@ -14,8 +14,10 @@
     "test:watch": "vitest",
     "client:dev": "pnpm --dir client dev",
     "client:check": "pnpm --dir client check",
+    "client:test": "pnpm --dir client test",
     "client:build": "pnpm --dir client build",
-    "verify": "pnpm check && pnpm test && pnpm build && pnpm client:check && pnpm client:build"
+    "smoke:release": "node scripts/smoke-release.mjs",
+    "verify": "pnpm check && pnpm test && pnpm build && pnpm client:check && pnpm client:test && pnpm client:build"
   },
   "keywords": [],
   "author": "",
@@ -26,6 +28,9 @@
       "version": "11.25.0",
       "onFail": "download"
     }
+  },
+  "engines": {
+    "node": ">=20.19.0 <25"
   },
   "type": "module",
   "packageManager": "pnpm@11.25.0",

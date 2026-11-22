@@ -17,7 +17,7 @@ import { validateTaskUpdate } from "../middlewares/validate-task-update.middlewa
 
 export const taskRouter = Router();
 
-// taskRouter.use(authenticate);
+taskRouter.use(authenticate);
 taskRouter.param("id", validateTaskId);
 
 taskRouter.get("/", validateTaskQuery, getTasks);
@@ -25,4 +25,4 @@ taskRouter.get("/:id", getTask);
 taskRouter.post("/", requireJson, validateTaskTitle, postTask);
 taskRouter.patch("/:id/complete", patchTaskComplete);
 taskRouter.patch("/:id", requireJson, validateTaskUpdate, patchTask);
-taskRouter.delete("/:id", removeTask);
+taskRouter.delete("/:id", requireRole("admin"), removeTask);
