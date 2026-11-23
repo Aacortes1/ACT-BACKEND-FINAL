@@ -140,6 +140,8 @@ OpenAPI 3.1 se sirve en `/api-docs.json` y Swagger UI en `/api-docs/`. La docume
 
 Ejecuta `pnpm verify` antes de entregar. Las pruebas automatizadas sustituyen los servicios de negocio y no requieren Atlas. Para validar persistencia y el cliente en navegador, configura Atlas, ejecuta `pnpm dev` y `pnpm client:dev`, e inicia sesión en Vite. Importa `postman/A10-local.postman_environment.json` y `postman/task-api-ec3-f2-a11.postman_collection.json` para las pruebas de A11; registra resultados observados en `evidencias/ec3-a11.md`. La colección A10 original se conserva en `postman/task-api-ec3-f2-a10.postman_collection.json`.
 
+Para A12, importa `postman/A12-local.postman_environment.json` y `postman/task-api-ec3-f3-a12.postman_collection.json`. Antes de registrar una cuenta, configura `password` solo en el entorno local de Postman. La colección comprueba `/health`, `/health/database`, CORS, autenticación y roles, CRUD y OpenAPI. Si la ejecutas contra Render, cambia `baseUrl`, `expectedVersion` y `expectedEnvironment` por los valores del despliegue; `/health/database` requiere que Atlas esté accesible.
+
 ## Evidencias
 
 - Pruebas CRUD persistente: `docs/pruebas-crud-mongodb.md`
